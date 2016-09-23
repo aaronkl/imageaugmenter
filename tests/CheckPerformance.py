@@ -7,7 +7,7 @@ if __name__ == '__main__' and __package__ is None:
     sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))
 
 import numpy as np
-from ImageAugmenter import ImageAugmenter, create_aug_matrices
+from imageaugmenter.ImageAugmenter import ImageAugmenter, create_aug_matrices
 from scipy import misc
 from skimage import data
 from skimage import transform as tf
@@ -39,8 +39,8 @@ def main():
                                hflip=True, vflip=True,
                                scale_to_percent=1.3, scale_axis_equally=False,
                                rotation_deg=25, shear_deg=10,
-                               translation_x_px=5, translation_y_px=5)
-    print("Running tests on %d images of shape %s" % (batch_size, str(image.shape)))
+                               translation_x_px=5, translation_y_px=5, interpolation_order=1)
+    print("Running tests on %d images of shape %s, interpolation_order=1" % (batch_size, str(image.shape)))
     run_tests(augmenter, images, nb_runs)
     print("")
 

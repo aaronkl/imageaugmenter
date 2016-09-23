@@ -7,7 +7,7 @@ if __name__ == '__main__' and __package__ is None:
     sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))
 
 import numpy as np
-from ImageAugmenter import ImageAugmenter
+from imageaugmenter import ImageAugmenter
 from scipy import misc
 from skimage import data
 
@@ -15,15 +15,16 @@ def main():
     """Plot example augmentations for Lena and an image loaded from a file."""
 
     # try on a lena image
-    image = data.lena()
+    print('Plotting float lena')
+    image = data.lena().astype(float)
     augmenter = ImageAugmenter(image.shape[0], image.shape[1],
                                hflip=True, vflip=True,
                                scale_to_percent=1.3, scale_axis_equally=False,
                                rotation_deg=25, shear_deg=10,
                                translation_x_px=5, translation_y_px=5)
+    augmenter.plot_image(image, 10)
 
-    augmenter.plot_image(image, 100)
-
+    print('Plotting chameleon')
     # check loading of images from file and augmenting them
     image = misc.imread("chameleon.png")
     augmenter = ImageAugmenter(image.shape[1], image.shape[0],
@@ -32,8 +33,9 @@ def main():
                                rotation_deg=25, shear_deg=10,
                                translation_x_px=5, translation_y_px=5)
 
-    augmenter.plot_image(image, 50)
+    augmenter.plot_image(image/255.0, 50)
 
+    print('Plotting chameleon with channel_is_first_axis=True')
     # move the channel from index 2 (3rd position) to index 0 (1st position)
     # so (y, x, rgb) becomes (rgb, y, x)
     # try if it still works

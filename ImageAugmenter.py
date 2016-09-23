@@ -324,7 +324,7 @@ def apply_aug_matrices(images, matrices, transform_channels_equally=True,
             # steps for three channels as in the else-part)
             matrix = matrices[order_indices[matrix_number]]
             result[img_idx, ...] = tf.warp(image, matrix, mode=mode, cval=cval,
-                                           order=interpolation_order)
+                                           order=interpolation_order, preserve_range=True)
             matrix_number += 1
         else:
             # we cant apply the matrix to the whole image in one step, instead
@@ -336,11 +336,11 @@ def apply_aug_matrices(images, matrices, transform_channels_equally=True,
                 matrix = matrices[order_indices[matrix_number]]
                 if channel_is_first_axis:
                     warped = tf.warp(image[channel_idx], matrix, mode=mode,
-                                     cval=cval, order=interpolation_order)
+                                     cval=cval, order=interpolation_order, preserve_range=True)
                     result[img_idx, channel_idx, ...] = warped
                 else:
                     warped = tf.warp(image[..., channel_idx], matrix, mode=mode,
-                                     cval=cval, order=interpolation_order)
+                                     cval=cval, order=interpolation_order, preserve_range=True)
                     result[img_idx, ..., channel_idx] = warped
 
                 if not transform_channels_equally:
@@ -349,6 +349,7 @@ def apply_aug_matrices(images, matrices, transform_channels_equally=True,
                 matrix_number += 1
 
     return result
+
 
 class ImageAugmenter(object):
     """Helper class to randomly augment images, usually for neural networks.
@@ -370,7 +371,8 @@ class ImageAugmenter(object):
                  scale_to_percent=1.0, scale_axis_equally=False,
                  rotation_deg=0, shear_deg=0,
                  translation_x_px=0, translation_y_px=0,
-                 transform_channels_equally=True):
+                 transform_channels_equally=True,
+                 interpolation_order=1):
         """
         Args:
             img_width_px: The intended width of each image in pixels.
@@ -427,6 +429,14 @@ class ImageAugmenter(object):
                 by -5 degrees. If you don't have any channels (2D grayscale),
                 you can simply ignore this setting.
                 Default is True (transform all equally).
+             interpolation_order : int, optional
+                The order of interpolation. The order has to be in the range 0-5:
+                 - 0: Nearest-neighbor
+                 - 1: Bi-linear (default)
+                 - 2: Bi-quadratic
+                 - 3: Bi-cubic
+                 - 4: Bi-quartic
+                 - 5: Bi-quintic
         """
         self.img_width_px = img_width_px
         self.img_height_px = img_height_px
@@ -465,7 +475,7 @@ class ImageAugmenter(object):
         self.translation_y_px = translation_y_px
         self.transform_channels_equally = transform_channels_equally
         self.cval = 0.0
-        self.interpolation_order = 1
+        self.interpolation_order = interpolation_order
         self.pregenerated_matrices = None
 
     def pregenerate_matrices(self, nb_matrices, seed=None):
@@ -720,6 +730,11 @@ class ImageAugmenter(object):
         else:
             fig = plt.figure(figsize=(10, 10))
 
+        if issubclass(images.dtype.type, np.floating) and \
+                        images.min() == 0 and images.max() == 255.0:
+            print '--Converting images to np.uint8'
+            images = images.astype(np.uint8)
+
         for i, image in enumerate(images):
             image = images[i]
 
@@ -729,7 +744,12 @@ class ImageAugmenter(object):
             ax.set_axis_off()
             # "cmap" should restrict the color map to grayscale, but strangely
             # also works well with color images
-            imgplot = plt.imshow(image, cmap=cm.Greys_r, aspect="equal")
+            if issubclass(image.dtype.type, np.floating):
+                assert image.min() >= -1.0 and image.max() <= 1.0
+                imgplot = plt.imshow(image, cmap=cm.Greys_r, aspect="equal")
+            else:
+                assert image.min() >= 0 and image.max() <= 255
+                imgplot = plt.imshow(image, aspect="equal")
 
         # not showing the plot might be useful e.g. on clusters
         if show_plot:
