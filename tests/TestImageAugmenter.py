@@ -43,6 +43,23 @@ class TestImageAugmenter(unittest.TestCase):
         for image_after in images_augmented:
             self.assertTrue(np.allclose(image_after, image_target_flipped))
 
+    def test_preserve_range2(self):
+        image_before = np.array([[-100.1, 0, 0],
+                                [0, 157.0, 157.0],
+                                [0, 0, 180.5]], dtype=float)
+        nb_augment = 500
+        images = np.tile(image_before, (nb_augment, 10, 10))
+        augmenter = ImageAugmenter(30, 30, hflip=True, vflip=True,
+                                   scale_to_percent=1.0,
+                                   scale_axis_equally=True,
+                                   rotation_deg=15, shear_deg=10,
+                                   translation_x_px=5, translation_y_px=5,
+                                   interpolation_order=1,
+                                   channel_is_first_axis=True,
+                                   preserve_range=True)
+        images_augmented = augmenter.augment_batch(images)
+        self.assertTrue(np.isclose(images_augmented.min(), -100.1))
+        self.assertTrue(np.isclose(images_augmented.max(), 180.5))
 
     @data(True, False)
     def test_rotation(self, preserve_range):
