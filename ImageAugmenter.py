@@ -251,7 +251,7 @@ def apply_aug_matrices(images, matrices, transform_channels_equally=True,
                                                    "parameter 'images'."
 
     # images must have uint8 as dtype (0-255)
-    assert images.dtype.name == "uint8", "Expected numpy.uint8 as image dtype."
+    # assert images.dtype.name == "uint8", "Expected numpy.uint8 as image dtype."
 
     # 3 axis total (2 per image) for grayscale,
     # 4 axis total (3 per image) for RGB (usually)

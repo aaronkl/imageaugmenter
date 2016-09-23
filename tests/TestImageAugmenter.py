@@ -8,7 +8,7 @@ if __name__ == '__main__' and __package__ is None:
 
 import unittest
 import numpy as np
-from ImageAugmenter import ImageAugmenter
+from imageaugmenter import ImageAugmenter
 import random
 from skimage import data
 
