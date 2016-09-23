@@ -10,15 +10,42 @@ import unittest
 import numpy as np
 from imageaugmenter import ImageAugmenter
 import random
-from skimage import data
+import skimage.data
+from ddt import ddt, data
 
 random.seed(123456789)
 np.random.seed(123456789)
 
+@ddt
 class TestImageAugmenter(unittest.TestCase):
     """Tests functionality of the ImageAugmenter class."""
 
-    def test_rotation(self):
+    def test_preserve_range(self):
+        image_before = [[255, 0, 0],
+                        [0, 233, 255],
+                        [0, 0, 255]]
+        image_before = np.array(image_before, dtype=np.uint8)
+        image_target_flipped = np.array([[0, 0, 255.0],
+                                        [255.0, 233.0, 0],
+                                        [255.0, 0, 0]], dtype=np.float32)
+
+        nb_augment = 1000
+        images = np.resize([image_before], (nb_augment, 3, 3))
+        # Test using just "False" for hflip (should be exactly 0%)
+        augmenter = ImageAugmenter(3, 3, hflip=False, preserve_range=True)
+        images_augmented = augmenter.augment_batch(images)
+        for image_after in images_augmented:
+            self.assertTrue(np.allclose(image_after, image_before))
+
+        # Test using just "True" for hflip (should be 100%)
+        augmenter = ImageAugmenter(3, 3, hflip=1.0, preserve_range=True)
+        images_augmented = augmenter.augment_batch(images)
+        for image_after in images_augmented:
+            self.assertTrue(np.allclose(image_after, image_target_flipped))
+
+
+    @data(True, False)
+    def test_rotation(self, preserve_range):
         """Test rotation of 90 degrees on an image that should change
         upon rotation."""
         image_before = [[0, 255, 0],
@@ -27,14 +54,19 @@ class TestImageAugmenter(unittest.TestCase):
         image_target = [[  0,   0,   0],
                         [1.0, 1.0, 1.0],
                         [  0,   0,   0]]
+        image_before = np.asarray(image_before)
+        image_target = np.asarray(image_target)
+        if preserve_range:
+            image_target *= 255.0
         images = np.array([image_before]).astype(np.uint8)
 
-        augmenter = ImageAugmenter(3, 3, rotation_deg=(90, 90))
+        augmenter = ImageAugmenter(3, 3, rotation_deg=(90, 90), preserve_range=preserve_range)
 
         image_after = augmenter.augment_batch(images)[0]
         self.assertTrue(np.allclose(image_target, image_after))
 
-    def test_rotation_invariant(self):
+    @data(True, False)
+    def test_rotation_invariant(self, preserve_range):
         """Test rotation of -90 to 90 degrees on an rotation invariant image."""
         image_before = [[0,   0, 0],
                         [0, 255, 0],
@@ -42,10 +74,16 @@ class TestImageAugmenter(unittest.TestCase):
         image_target = [[0,   0, 0],
                         [0, 1.0, 0],
                         [0,   0, 0]]
+        image_before = np.asarray(image_before)
+        image_target = np.asarray(image_target)
+        tolerance = 0.1
+        if preserve_range:
+            image_target *= 255.0
+            tolerance *= 255.0
         images = np.array([image_before]).astype(np.uint8)
 
         # random rotation of up to 180 degress
-        augmenter = ImageAugmenter(3, 3, rotation_deg=180)
+        augmenter = ImageAugmenter(3, 3, rotation_deg=180, preserve_range=preserve_range)
 
         # all must be similar to target
         nb_similar = 0
@@ -53,11 +91,12 @@ class TestImageAugmenter(unittest.TestCase):
             image_after = augmenter.augment_batch(images)[0]
             # some tolerance here - interpolation problems can let the image
             # change a bit, even though it should be invariant to rotations
-            if np.allclose(image_target, image_after, atol=0.1):
+            if np.allclose(image_target, image_after, atol=tolerance):
                 nb_similar += 1
         self.assertEquals(nb_similar, 100)
 
-    def test_scaling(self):
+    @data(True, False)
+    def testscaling(self, preserve_range):
         """Rough test for zooming/scaling (only zoom in / scaling >1.0).
         The test is rough, because interpolation problems make the result
         of scaling on synthetic images rather hard to predict (and unintuitive).
@@ -75,14 +114,16 @@ class TestImageAugmenter(unittest.TestCase):
 
         # about 200% zoom in
         augmenter = ImageAugmenter(size_x, size_y, scale_to_percent=(1.99, 1.99),
-                                   scale_axis_equally=True)
+                                   scale_axis_equally=True, preserve_range=preserve_range)
 
         image_after = augmenter.augment_batch(images)[0]
         # we scale positively (zoom in), therefor we expect the center bright
         # spot to grow, resulting in a higher total brightness
-        self.assertTrue(np.sum(image_after) > np.sum(image_before)/255)
+        divisor = 1.0 if preserve_range else 255.0
+        self.assertTrue(np.sum(image_after) > np.sum(image_before) / divisor)
 
-    def test_shear(self):
+    @data(True, False)
+    def test_shear(self, preserve_range):
         """Very rough test of shear: It simply measures whether image tend
         to be significantly different after shear (any change)."""
 
@@ -92,8 +133,13 @@ class TestImageAugmenter(unittest.TestCase):
         image_target = [[0, 1.0, 0],
                         [0, 1.0, 0],
                         [0, 1.0, 0]]
+        image_before = np.asarray(image_before)
+        image_target = np.asarray(image_target)
+        if preserve_range:
+            image_target *= 255.0
+
         images = np.array([image_before]).astype(np.uint8)
-        augmenter = ImageAugmenter(3, 3, shear_deg=50)
+        augmenter = ImageAugmenter(3, 3, shear_deg=50, preserve_range=preserve_range)
 
         # the majority should be different from the source image
         nb_different = 0
@@ -104,7 +150,8 @@ class TestImageAugmenter(unittest.TestCase):
                 nb_different += 1
         self.assertTrue(nb_different > nb_augment*0.9)
 
-    def test_translation_x(self):
+    @data(True, False)
+    def test_translation_x(self, preserve_range):
         """Testing translation on the x-axis."""
         #image_before = np.zeros((2, 2), dtype=np.uint8)
         image_before = [[255,   0],
@@ -112,30 +159,42 @@ class TestImageAugmenter(unittest.TestCase):
         #image_after = np.zeros((2, 2), dtype=np.float32)
         image_target = [[0, 1.0],
                         [0, 1.0]]
+        image_before = np.asarray(image_before)
+        image_target = np.asarray(image_target)
+        if preserve_range:
+            image_target *= 255.0
+
         images = np.array([image_before]).astype(np.uint8)
-        augmenter = ImageAugmenter(2, 2, translation_x_px=(1,1))
+        augmenter = ImageAugmenter(2, 2, translation_x_px=(1,1), preserve_range=preserve_range)
 
         # all must be similar
         for _ in range(100):
             image_after = augmenter.augment_batch(images)[0]
             self.assertTrue(np.allclose(image_target, image_after))
 
-    def test_translation_y(self):
+    @data(True, False)
+    def test_translation_y(self, preserve_range):
         """Testing translation on the y-axis."""
         image_before = [[  0,   0],
                         [255, 255]]
         image_target = [[1.0, 1.0],
                         [  0,   0]]
+        image_before = np.asarray(image_before)
+        image_target = np.asarray(image_target)
+        if preserve_range:
+            image_target *= 255.0
         images = np.array([image_before]).astype(np.uint8)
         # translate always by -1px on y-axis
-        augmenter = ImageAugmenter(2, 2, translation_y_px=(-1,-1))
+        augmenter = ImageAugmenter(2, 2, translation_y_px=(-1, -1),
+                                   preserve_range=preserve_range)
 
         # all must be similar
         for _ in range(100):
             image_after = augmenter.augment_batch(images)[0]
             self.assertTrue(np.allclose(image_target, image_after))
 
-    def test_single_channel(self):
+    @data(True, False)
+    def test_single_channel(self, preserve_range):
         """Tests images with channels (e.g. RGB channels)."""
         # One single channel
         # channel is last axis
@@ -147,9 +206,11 @@ class TestImageAugmenter(unittest.TestCase):
         image_target = np.zeros((2, 2, 1), dtype=np.float32)
         image_target[0, 1, 0] = 1.0
         image_target[1, 1, 0] = 1.0
+        if preserve_range:
+            image_target *= 255.0
 
         images = np.array([image_before]).astype(np.uint8)
-        augmenter = ImageAugmenter(2, 2, translation_x_px=(1,1))
+        augmenter = ImageAugmenter(2, 2, translation_x_px=(1, 1), preserve_range=preserve_range)
 
         # all must be similar
         for _ in range(100):
@@ -166,17 +227,22 @@ class TestImageAugmenter(unittest.TestCase):
         image_target = np.zeros((1, 2, 2), dtype=np.float32)
         image_target[0] = [[0, 1.0],
                            [0, 1.0]]
+        image_before = np.asarray(image_before)
+        image_target = np.asarray(image_target)
+        if preserve_range:
+            image_target *= 255.0
 
         images = np.array([image_before]).astype(np.uint8)
-        augmenter = ImageAugmenter(2, 2, translation_x_px=(1,1),
-                                   channel_is_first_axis=True)
+        augmenter = ImageAugmenter(2, 2, translation_x_px=(1, 1),
+                                   channel_is_first_axis=True, preserve_range=preserve_range)
 
         # all must be similar
         for _ in range(100):
             image_after = augmenter.augment_batch(images)[0]
             self.assertTrue(np.allclose(image_target, image_after))
 
-    def test_two_channels(self):
+    @data(True, False)
+    def test_two_channels(self, preserve_range):
         """Tests augmentation of images with two channels (either first or last
         axis of each image). Tested using x-translation."""
 
@@ -184,8 +250,8 @@ class TestImageAugmenter(unittest.TestCase):
         # two channels,
         # channel is the FIRST axis of each image
         # -----------------------------------------------
-        augmenter = ImageAugmenter(2, 2, translation_y_px=(0,1),
-                                   channel_is_first_axis=True)
+        augmenter = ImageAugmenter(2, 2, translation_y_px=(0, 1),
+                                   channel_is_first_axis=True, preserve_range=preserve_range)
 
         image_before = np.zeros((2, 2, 2)).astype(np.uint8)
         # 1st channel: top row white, bottom row black
@@ -220,6 +286,8 @@ class TestImageAugmenter(unittest.TestCase):
         image = np.array([image_before]).astype(np.uint8)
         images = np.resize(image, (nb_augment, 2, 2, 2))
         images_augmented = augmenter.augment_batch(images)
+        if preserve_range:
+            images_augmented /= 255.0
 
         nb_similar = 0
         for image_after in images_augmented:
@@ -231,8 +299,8 @@ class TestImageAugmenter(unittest.TestCase):
         # two channels,
         # channel is the LAST axis of each image
         # -----------------------------------------------
-        augmenter = ImageAugmenter(2, 2, translation_y_px=(0,1),
-                                   channel_is_first_axis=False)
+        augmenter = ImageAugmenter(2, 2, translation_y_px=(0, 1),
+                                   channel_is_first_axis=False, preserve_range=preserve_range)
 
         image_before = np.zeros((2, 2, 2)).astype(np.uint8)
         # 1st channel: top row white, bottom row black
@@ -267,6 +335,8 @@ class TestImageAugmenter(unittest.TestCase):
         image = np.array([image_before]).astype(np.uint8)
         images = np.resize(image, (nb_augment, 2, 2, 2))
         images_augmented = augmenter.augment_batch(images)
+        if preserve_range:
+            images_augmented /= 255.0
 
         nb_similar = 0
         for image_after in images_augmented:
@@ -274,7 +344,8 @@ class TestImageAugmenter(unittest.TestCase):
                 nb_similar += 1
         self.assertTrue(nb_similar > (nb_augment*0.4) and nb_similar < (nb_augment*0.6))
 
-    def test_transform_channels_unequally(self):
+    @data(True, False)
+    def test_transform_channels_unequally(self, preserve_range):
         """Tests whether 2 or more channels can be augmented non-identically
         at the same time.
 
@@ -282,9 +353,9 @@ class TestImageAugmenter(unittest.TestCase):
         is rotated by 5 degrees.
         """
         # two channels, channel is first axis of each image
-        augmenter = ImageAugmenter(3, 3, translation_x_px=(0,1),
+        augmenter = ImageAugmenter(3, 3, translation_x_px=(0, 1),
                                    transform_channels_equally=False,
-                                   channel_is_first_axis=True)
+                                   channel_is_first_axis=True, preserve_range=preserve_range)
 
         image_before = np.zeros((2, 3, 3)).astype(np.uint8)
         image_before[0] = [[255,   0,   0],
@@ -314,6 +385,8 @@ class TestImageAugmenter(unittest.TestCase):
         image = np.array([image_before]).astype(np.uint8)
         images = np.resize(image, (nb_augment, 2, 3, 3))
         images_augmented = augmenter.augment_batch(images)
+        if preserve_range:
+            images_augmented /= 255.0
 
         # augment 1000 times and count how often the channels were transformed
         # in equal or unequal ways.
@@ -336,10 +409,11 @@ class TestImageAugmenter(unittest.TestCase):
         self.assertTrue(nb_equally_transformed > 0.40*nb_augment
                         and nb_equally_transformed < 0.60*nb_augment)
 
-    def test_no_blacks(self):
+    @data(True, False)
+    def test_no_blacks(self, preserve_range):
         """Test whether random augmentations can cause an image to turn
         completely black (cval=0.0), which should never happen."""
-        image_before = data.camera()
+        image_before = skimage.data.camera()
         y_size, x_size = image_before.shape
         augmenter = ImageAugmenter(x_size, y_size,
                                    scale_to_percent=1.5,
@@ -347,7 +421,8 @@ class TestImageAugmenter(unittest.TestCase):
                                    rotation_deg=90,
                                    shear_deg=20,
                                    translation_x_px=10,
-                                   translation_y_px=10)
+                                   translation_y_px=10,
+                                   preserve_range=preserve_range)
         image_black = np.zeros(image_before.shape, dtype=np.float32)
         nb_augment = 100
         images = np.resize([image_before], (nb_augment, y_size, x_size))
@@ -358,7 +433,8 @@ class TestImageAugmenter(unittest.TestCase):
                 nb_black += 1
         self.assertEqual(nb_black, 0)
 
-    def test_non_square_images(self):
+    @data(True, False)
+    def test_non_square_images(self, preserve_range):
         """Test whether transformation of images with unequal x and y axis sizes
         works as expected."""
 
@@ -374,17 +450,21 @@ class TestImageAugmenter(unittest.TestCase):
             image_before[y_line_pos][x_pos] = 255
             image_target[y_line_pos - 2][x_pos] = 1.0
 
-        augmenter = ImageAugmenter(x_size, y_size, translation_y_px=(-2,-2))
+        augmenter = ImageAugmenter(x_size, y_size, translation_y_px=(-2, -2),
+                                   preserve_range=preserve_range)
         nb_augment = 100
         images = np.resize([image_before], (nb_augment, y_size, x_size))
         images_augmented = augmenter.augment_batch(images)
+        if preserve_range:
+            images_augmented /= 255.0
         nb_similar = 0
         for image_after in images_augmented:
             if np.allclose(image_after, image_target):
                 nb_similar += 1
         self.assertEqual(nb_augment, nb_similar)
 
-    def test_no_information_leaking(self):
+    @data(True, False)
+    def test_no_information_leaking(self, preserve_range):
         """Tests whether the image provided to augment_batch() is changed
         instead of only simply returned in the changed form (leaking
         information / hidden sideffects)."""
@@ -401,11 +481,13 @@ class TestImageAugmenter(unittest.TestCase):
                                    hflip=True, vflip=True,
                                    scale_to_percent=1.5,
                                    rotation_deg=25, shear_deg=10,
-                                   translation_x_px=5, translation_y_px=5)
+                                   translation_x_px=5, translation_y_px=5,
+                                   preserve_range=preserve_range)
         images_after = augmenter.augment_batch(images)
         self.assertTrue(np.array_equal(image_before, image_before_copy))
 
-    def test_horizontal_flipping(self):
+    @data(True, False)
+    def test_horizontal_flipping(self, preserve_range):
         """Tests horizontal flipping of images (mirror on y-axis)."""
 
         image_before = [[255,   0,   0],
@@ -420,8 +502,10 @@ class TestImageAugmenter(unittest.TestCase):
         images = np.resize([image_before], (nb_augment, 3, 3))
 
         # Test using just "False" for hflip (should be exactly 0%)
-        augmenter = ImageAugmenter(3, 3, hflip=False)
+        augmenter = ImageAugmenter(3, 3, hflip=False, preserve_range=preserve_range)
         images_augmented = augmenter.augment_batch(images)
+        if preserve_range:
+            images_augmented /= 255.0
         nb_similar = 0
         for image_after in images_augmented:
             if np.allclose(image_after, image_target):
@@ -429,8 +513,10 @@ class TestImageAugmenter(unittest.TestCase):
         self.assertEqual(nb_similar, 0)
 
         # Test using just "True" for hflip (should be ~50%)
-        augmenter = ImageAugmenter(3, 3, hflip=True)
+        augmenter = ImageAugmenter(3, 3, hflip=True, preserve_range=preserve_range)
         images_augmented = augmenter.augment_batch(images)
+        if preserve_range:
+            images_augmented /= 255.0
         nb_similar = 0
         for image_after in images_augmented:
             if np.allclose(image_after, image_target):
@@ -439,8 +525,10 @@ class TestImageAugmenter(unittest.TestCase):
 
         # Test using a probability (float value) for hflip (hflip=0.9,
         # should be ~90%)
-        augmenter = ImageAugmenter(3, 3, hflip=0.9)
+        augmenter = ImageAugmenter(3, 3, hflip=0.9, preserve_range=preserve_range)
         images_augmented = augmenter.augment_batch(images)
+        if preserve_range:
+            images_augmented /= 255.0
         nb_similar = 0
         for image_after in images_augmented:
             if np.allclose(image_after, image_target):
@@ -463,15 +551,19 @@ class TestImageAugmenter(unittest.TestCase):
                            [  0, 1.0, 1.0],
                            [  0,   0,   0]]
         images = np.resize([image_before], (nb_augment, 2, 3, 3))
-        augmenter = ImageAugmenter(3, 3, hflip=1.0, channel_is_first_axis=True)
+        augmenter = ImageAugmenter(3, 3, hflip=1.0, channel_is_first_axis=True,
+                                   preserve_range=preserve_range)
         images_augmented = augmenter.augment_batch(images)
+        if preserve_range:
+            images_augmented /= 255.0
         nb_similar = 0
         for image_after in images_augmented:
             if np.allclose(image_after, image_target):
                 nb_similar += 1
         self.assertTrue(nb_similar > nb_augment*0.9 and nb_similar <= nb_augment*1.0)
 
-    def test_vertical_flipping(self):
+    @data(True, False)
+    def test_vertical_flipping(self, preserve_range):
         """Tests vertical flipping of images (mirror on x-axis)."""
 
         image_before = [[255,   0,   0],
@@ -486,8 +578,10 @@ class TestImageAugmenter(unittest.TestCase):
         images = np.resize([image_before], (nb_augment, 3, 3))
 
         # Test using just "False" for vflip (should be exactly 0%)
-        augmenter = ImageAugmenter(3, 3, vflip=False)
+        augmenter = ImageAugmenter(3, 3, vflip=False, preserve_range=preserve_range)
         images_augmented = augmenter.augment_batch(images)
+        if preserve_range:
+            images_augmented /= 255.0
         nb_similar = 0
         for image_after in images_augmented:
             if np.allclose(image_after, image_target):
@@ -495,8 +589,10 @@ class TestImageAugmenter(unittest.TestCase):
         self.assertEqual(nb_similar, 0)
 
         # Test using just "True" for vflip (should be ~50%)
-        augmenter = ImageAugmenter(3, 3, vflip=True)
+        augmenter = ImageAugmenter(3, 3, vflip=True, preserve_range=preserve_range)
         images_augmented = augmenter.augment_batch(images)
+        if preserve_range:
+            images_augmented /= 255.0
         nb_similar = 0
         for image_after in images_augmented:
             if np.allclose(image_after, image_target):
@@ -505,8 +601,10 @@ class TestImageAugmenter(unittest.TestCase):
 
         # Test using a probability (float value) for vflip (vflip=0.9,
         # should be ~90%)
-        augmenter = ImageAugmenter(3, 3, vflip=0.9)
+        augmenter = ImageAugmenter(3, 3, vflip=0.9, preserve_range=preserve_range)
         images_augmented = augmenter.augment_batch(images)
+        if preserve_range:
+            images_augmented /= 255.0
         nb_similar = 0
         for image_after in images_augmented:
             if np.allclose(image_after, image_target):
@@ -529,8 +627,11 @@ class TestImageAugmenter(unittest.TestCase):
                            [  0, 1.0,   0],
                            [  0, 1.0,   0]]
         images = np.resize([image_before], (nb_augment, 2, 3, 3))
-        augmenter = ImageAugmenter(3, 3, vflip=1.0, channel_is_first_axis=True)
+        augmenter = ImageAugmenter(3, 3, vflip=1.0, channel_is_first_axis=True,
+                                   preserve_range=preserve_range)
         images_augmented = augmenter.augment_batch(images)
+        if preserve_range:
+            images_augmented /= 255.0
         nb_similar = 0
         for image_after in images_augmented:
             if np.allclose(image_after, image_target):

@@ -194,7 +194,7 @@ def create_aug_matrices(nb_matrices, img_width_px, img_height_px,
 def apply_aug_matrices(images, matrices, transform_channels_equally=True,
                        channel_is_first_axis=False, random_order=True,
                        mode="constant", cval=0.0, interpolation_order=1,
-                       seed=None):
+                       preserve_range=True, seed=None):
     """Augment the given images using the given augmentation matrices.
 
     This function is a wrapper around scikit-image's transform.warp().
@@ -324,7 +324,8 @@ def apply_aug_matrices(images, matrices, transform_channels_equally=True,
             # steps for three channels as in the else-part)
             matrix = matrices[order_indices[matrix_number]]
             result[img_idx, ...] = tf.warp(image, matrix, mode=mode, cval=cval,
-                                           order=interpolation_order, preserve_range=True)
+                                           order=interpolation_order,
+                                           preserve_range=preserve_range)
             matrix_number += 1
         else:
             # we cant apply the matrix to the whole image in one step, instead
@@ -336,11 +337,13 @@ def apply_aug_matrices(images, matrices, transform_channels_equally=True,
                 matrix = matrices[order_indices[matrix_number]]
                 if channel_is_first_axis:
                     warped = tf.warp(image[channel_idx], matrix, mode=mode,
-                                     cval=cval, order=interpolation_order, preserve_range=True)
+                                     cval=cval, order=interpolation_order,
+                                     preserve_range=preserve_range)
                     result[img_idx, channel_idx, ...] = warped
                 else:
                     warped = tf.warp(image[..., channel_idx], matrix, mode=mode,
-                                     cval=cval, order=interpolation_order, preserve_range=True)
+                                     cval=cval, order=interpolation_order,
+                                     preserve_range=preserve_range)
                     result[img_idx, ..., channel_idx] = warped
 
                 if not transform_channels_equally:
@@ -372,7 +375,8 @@ class ImageAugmenter(object):
                  rotation_deg=0, shear_deg=0,
                  translation_x_px=0, translation_y_px=0,
                  transform_channels_equally=True,
-                 interpolation_order=1):
+                 interpolation_order=1,
+                 preserve_range=False):
         """
         Args:
             img_width_px: The intended width of each image in pixels.
@@ -429,7 +433,7 @@ class ImageAugmenter(object):
                 by -5 degrees. If you don't have any channels (2D grayscale),
                 you can simply ignore this setting.
                 Default is True (transform all equally).
-             interpolation_order : int, optional
+            interpolation_order : int, optional
                 The order of interpolation. The order has to be in the range 0-5:
                  - 0: Nearest-neighbor
                  - 1: Bi-linear (default)
@@ -437,6 +441,9 @@ class ImageAugmenter(object):
                  - 3: Bi-cubic
                  - 4: Bi-quartic
                  - 5: Bi-quintic
+            preserve_range : bool, optional
+                Whether to keep the original range of values. Otherwise, the input
+                image is converted according to the conventions of `img_as_float`.
         """
         self.img_width_px = img_width_px
         self.img_height_px = img_height_px
@@ -477,6 +484,7 @@ class ImageAugmenter(object):
         self.cval = 0.0
         self.interpolation_order = interpolation_order
         self.pregenerated_matrices = None
+        self.preserve_range = preserve_range
 
     def pregenerate_matrices(self, nb_matrices, seed=None):
         """Pregenerate/cache augmentation matrices.
@@ -618,8 +626,9 @@ class ImageAugmenter(object):
         if self.pregenerated_matrices is None \
            and self.scale_to_percent == 1.0 and self.rotation_deg == 0 \
            and self.shear_deg == 0 \
-           and self.translation_x_px == 0 and self.translation_y_px == 0:
-            return np.array(images, dtype=np.float32) / 255
+           and self.translation_x_px == 0 and self.translation_y_px == 0 \
+                and self.preserve_range:
+            return np.array(images, dtype=np.float32)
 
         # --------------------------------
         # generate transformation matrices
@@ -652,6 +661,7 @@ class ImageAugmenter(object):
                                   transform_channels_equally=self.transform_channels_equally,
                                   channel_is_first_axis=self.channel_is_first_axis,
                                   cval=self.cval, interpolation_order=self.interpolation_order,
+                                  preserve_range=self.preserve_range,
                                   seed=seed)
 
     def plot_image(self, image, nb_repeat=40, show_plot=True):

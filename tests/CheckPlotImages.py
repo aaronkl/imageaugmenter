@@ -11,17 +11,19 @@ from imageaugmenter import ImageAugmenter
 from scipy import misc
 from skimage import data
 
+
 def main():
     """Plot example augmentations for Lena and an image loaded from a file."""
 
     # try on a lena image
-    print('Plotting float lena')
+    print('Plotting float lena, preserve range')
     image = data.lena().astype(float)
     augmenter = ImageAugmenter(image.shape[0], image.shape[1],
                                hflip=True, vflip=True,
                                scale_to_percent=1.3, scale_axis_equally=False,
                                rotation_deg=25, shear_deg=10,
-                               translation_x_px=5, translation_y_px=5)
+                               translation_x_px=5, translation_y_px=5,
+                               preserve_range=True)
     augmenter.plot_image(image, 10)
 
     print('Plotting chameleon')
