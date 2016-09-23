@@ -376,7 +376,8 @@ class ImageAugmenter(object):
                  translation_x_px=0, translation_y_px=0,
                  transform_channels_equally=True,
                  interpolation_order=1,
-                 preserve_range=False):
+                 preserve_range=False,
+                 cval=0.0):
         """
         Args:
             img_width_px: The intended width of each image in pixels.
@@ -444,6 +445,9 @@ class ImageAugmenter(object):
             preserve_range : bool, optional
                 Whether to keep the original range of values. Otherwise, the input
                 image is converted according to the conventions of `img_as_float`.
+            cval : float, optional
+                The value to use for filling outside
+                the image boundaries.
         """
         self.img_width_px = img_width_px
         self.img_height_px = img_height_px
@@ -481,7 +485,7 @@ class ImageAugmenter(object):
         self.translation_x_px = translation_x_px
         self.translation_y_px = translation_y_px
         self.transform_channels_equally = transform_channels_equally
-        self.cval = 0.0
+        self.cval = cval
         self.interpolation_order = interpolation_order
         self.pregenerated_matrices = None
         self.preserve_range = preserve_range
