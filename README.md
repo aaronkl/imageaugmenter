@@ -34,7 +34,10 @@ The expected shape of that array is any of the following:
 * `(image-index, y, x)`, automatically detected
 * `(image-index, y, x, image channel)`, automatically detected
 * `(image-index, channel, y, x)`, set `channel_is_first_axis=True` in the constructor if that is the case for you.
-The return type is a numpy array of dtype **numpy.float32** with values between 0.0 and 1.0.
+The return type is a numpy array of dtype **numpy.float32**: 
+    a) with values in the same range as original array, if you set `preserve_range=True` in the constructor (default);
+    b) with values between 0.0 and 1.0, if yo set `preserve_range=False` in the constructor.
+
 
 # Examples
 
